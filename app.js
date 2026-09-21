@@ -9,12 +9,39 @@ function monthLabel(k=state.month){const [y,m]=k.split("-").map(Number);return n
 function currentTariff(){return new Date().getDate()<=20?250000:280000}
 function paidThisMonth(id,m=state.month){return state.payments.filter(p=>p.studentId===id&&p.month===m).reduce((a,p)=>a+p.amount,0)}
 function targetForStudent(id,m=state.month){
+
  const ps=state.payments.filter(p=>p.studentId===id&&p.month===m);
- if(!ps.length) return (m===monthKey()&&new Date().getDate()>20)?280000:250000;
- const total=ps.reduce((a,p)=>a+p.amount,0);
- if(total>=250000) return 250000;
- if(m===monthKey()&&new Date().getDate()>20) return 280000;
+
+ // Joriy oy uchun bugungi sana bo'yicha tarif
+
+ if(m===monthKey()){
+
+   return currentTariff();
+
+ }
+
+ // Eski oylar uchun to'lov bo'lgan bo'lsa,
+
+ // shu oyda oxirgi to'lov qilingan sanadagi tarifni olish
+
+ if(ps.length){
+
+   const last=ps[ps.length-1];
+
+   const parts=String(last.date||"").split(".");
+
+   const day=Number(parts[0]);
+
+   if(day>20) return 280000;
+
+   return 250000;
+
+ }
+
+ // To'lov bo'lmagan eski oy
+
  return 250000;
+
 }
 function due(s,m=state.month){return Math.max(0,targetForStudent(s.id,m)-paidThisMonth(s.id,m))}
 function initials(n){return String(n||"").split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase()||"?"}
