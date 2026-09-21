@@ -15,27 +15,17 @@ function currentTariff(){return new Date().getDate()<=20?250000:280000}
 function paidThisMonth(id,m=state.month){return state.payments.filter(p=>p.studentId===id&&p.month===m).reduce((a,p)=>a+p.amount,0)}
 function targetForStudent(id,m=state.month){
 
- const ps=state.payments.filter(p=>p.studentId===id&&p.month===m);
+  // Hozirgi oy bo‘lsa — bugungi sanaga qarab tarif
 
- const total=ps.reduce((a,p)=>a+p.amount,0);
+  if(m===monthKey()){
 
- // Agar 250 000 yoki undan ko‘p to‘langan bo‘lsa,
+    return new Date().getDate()<=20 ? 250000 : 280000;
 
- // o‘quvchi shu oy uchun to‘lagan hisoblanadi.
+  }
 
- if(total>=250000) return 250000;
+  // O‘tgan oylar uchun tarif har doim 280 000
 
- // Hozirgi oy bo‘lsa — bugungi sanaga qarab tarif.
-
- if(m===monthKey()){
-
-   return new Date().getDate()<=20 ? 250000 : 280000;
-
- }
-
- // O‘tib ketgan oyda to‘lanmagan qarz — 280 000.
-
- return 280000;
+  return 280000;
 
 }
 function due(s,m=state.month){return Math.max(0,targetForStudent(s.id,m)-paidThisMonth(s.id,m))}
