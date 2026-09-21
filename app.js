@@ -1,390 +1,96 @@
-const KEY = "keleshek_pay_students_v2";
-
-let students = [];
-try {
-  students = JSON.parse(localStorage.getItem(KEY) || "[]");
-  if (!Array.isArray(students)) students = [];
-} catch (e) {
-  students = [];
+const KEY="keleshek_pay_v3";
+const state={students:[],payments:[],tab:"home"};
+const $=s=>document.querySelector(s);
+function load(){try{const x=JSON.parse(localStorage.getItem(KEY));if(x){state.students=x.students||[];state.payments=x.payments||[]}}catch(e){}}
+function save(){localStorage.setItem(KEY,JSON.stringify({students:state.students,payments:state.payments}))}
+function money(n){return new Intl.NumberFormat("uz-UZ").format(n)+" so'm"}
+function tariff(date=new Date()){return date.getDate()<=20?250000:280000}
+function monthLabel(){return new Intl.DateTimeFormat("uz-UZ",{month:"long",year:"numeric"}).format(new Date())}
+function initials(n){return n.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase()}
+function paidThisMonth(id){return state.payments.filter(p=>p.studentId===id&&p.month===new Date().toISOString().slice(0,7)).reduce((a,p)=>a+p.amount,0)}
+function due(s){return Math.max(0,tariff()-paidThisMonth(s.id))}
+function render(){
+ document.querySelector("#app").innerHTML=`<div class="app">
+ <header class="header"><div><div class="brand">KELESHEK PAY</div><div class="month">${monthLabel()}</div></div><button class="plus" onclick="openAdd()">+</button></header>
+ <main class="content">${state.tab==="home"?home():state.tab==="students"?students():state.tab==="payments"?payments():settings()}</main>
+ <nav class="bottom">
+ ${nav("home","⌂","Bosh sahifa")}${nav("students","👥","O‘quvchilar")}${nav("payments","▣","To‘lovlar")}${nav("settings","⚙","Sozlamalar")}
+ </nav></div>`;
 }
-
-let currentPage = "home";
-
-function save() {
-  localStorage.setItem(KEY, JSON.stringify(students));
+function nav(t,i,l){return `<button class="nav ${state.tab===t?"active":""}" onclick="state.tab='${t}';render()"><span class="ico">${i}</span>${l}</button>`}
+function home(){
+ const paid=state.students.filter(s=>due(s)===0).length, debt=state.students.filter(s=>due(s)>0), revenue=state.payments.filter(p=>p.month===new Date().toISOString().slice(0,7)).reduce((a,p)=>a+p.amount,0);
+ return `<div class="grid">
+ <div class="card"><div class="label">O‘quvchilar</div><div class="num blue">${state.students.length}</div></div>
+ <div class="card"><div class="label">To‘laganlar</div><div class="num green">${paid}</div></div>
+ <div class="card"><div class="label">Qarzdorlar</div><div class="num red">${debt.length}</div></div>
+ <div class="card"><div class="label">Tushum</div><div class="num blue">${money(revenue)}</div></div>
+ <div class="card tariff"><div class="label">Bugungi tarif</div><div class="num">${money(tariff())}</div><div class="sub">${new Date().getDate()<=20?"20-sanagacha":"21-sanadan boshlab"} to‘lov</div></div>
+ </div>
+ <div class="section-title">Tezkor amal</div><button class="primary" onclick="openAdd()">＋ O‘quvchi qo‘shish</button>
+ <div class="section-title">Qarzdorlar</div>
+ <div class="list">${debt.length?debt.slice(0,10).map(studentCard).join(""):`<div class="empty">Hozircha qarzdorlar yo‘q</div>`}</div>`;
 }
-
-function monthKey() {
-  const d = new Date();
-  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+function studentCard(s){
+ const d=due(s);
+ return `<button class="student" style="text-align:left" onclick="openProfile('${s.id}')"><div class="avatar">${initials(s.name)}</div><div class="student-main"><div class="student-name">${esc(s.name)}</div><div class="student-meta">${esc(s.group||"Guruh ko‘rsatilmagan")}</div></div><span class="badge ${d?"redbg":"greenbg"}">${d?money(d):"To‘langan"}</span></button>`;
 }
-
-function monthTitle() {
-  return new Intl.DateTimeFormat("uz-UZ", {
-    month: "long",
-    year: "numeric"
-  }).format(new Date());
+function students(){
+ return `<div class="section-title" style="margin-top:0">O‘quvchilar</div><input class="search" placeholder="O‘quvchini qidirish..." oninput="filterStudents(this.value)"><div id="studentList" class="list">${state.students.map(studentCard).join("")||`<div class="empty">Hozircha o‘quvchi yo‘q.<br><br><button class="smallbtn" onclick="openAdd()">O‘quvchi qo‘shish</button></div>`}</div>`;
 }
-
-function currentPrice() {
-  return new Date().getDate() <= 20 ? 250000 : 280000;
+function filterStudents(q){const x=q.toLowerCase();$("#studentList").innerHTML=state.students.filter(s=>s.name.toLowerCase().includes(x)||(s.group||"").toLowerCase().includes(x)).map(studentCard).join("")||`<div class="empty">Topilmadi</div>`}
+function payments(){
+ const arr=state.payments.slice().reverse();
+ return `<div class="section-title" style="margin-top:0">To‘lovlar</div>${arr.length?`<div class="list">${arr.map(p=>{const s=state.students.find(x=>x.id===p.studentId);return `<div class="card"><div class="row"><b>${esc(s?.name||"O‘chirilgan o‘quvchi")}</b><span class="badge greenbg">+${money(p.amount)}</span></div><div class="sub">${p.date} · ${p.note||"Oylik to‘lov"}</div></div>`}).join("")}</div>`:`<div class="empty">Hozircha to‘lovlar tarixi yo‘q.</div>`}`;
 }
-
-function money(n) {
-  return new Intl.NumberFormat("uz-UZ").format(Number(n) || 0) + " so'm";
+function settings(){return `<div class="section-title" style="margin-top:0">Sozlamalar</div><div class="card"><div class="row"><div><b>20-sanagacha tarif</b><div class="sub">Standart: 250 000 so‘m</div></div></div></div><div class="card" style="margin-top:12px"><div class="row"><div><b>21-sanadan keyingi tarif</b><div class="sub">Standart: 280 000 so‘m</div></div></div></div><div class="card" style="margin-top:12px"><b>SMS</b><div class="sub" style="margin-top:7px">SMS yuborish uchun keyin SMS provayder API ulanadi. Hozircha ilova SMS matnini tayyorlashga tayyor.</div></div>`}
+function openAdd(){
+ modal(`<button class="close" onclick="closeModal()">×</button><h2>Yangi o‘quvchi</h2>
+ <div class="field"><input id="f_name" placeholder="Ism-familiya *"></div>
+ <div class="field"><input id="f_phone" placeholder="O‘quvchi telefoni" inputmode="tel"></div>
+ <div class="field"><input id="f_parent" placeholder="Ota-ona ismi"></div>
+ <div class="field"><input id="f_parentPhone" placeholder="Ota-ona telefoni" inputmode="tel"></div>
+ <div class="field"><input id="f_group" placeholder="Guruh"></div>
+ <div class="field"><input id="f_subject" placeholder="Fan"></div>
+ <div class="field"><input id="f_dueDay" placeholder="To‘lov kuni (masalan: 20)" inputmode="numeric"></div>
+ <div class="actions"><button class="cancel" onclick="closeModal()">Bekor</button><button class="save" onclick="addStudent()">Saqlash</button></div>`);
 }
-
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, function (c) {
-    return {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;"
-    }[c];
-  });
+function addStudent(){
+ const name=$("#f_name").value.trim();if(!name){alert("Ism-familiyani kiriting");return}
+ state.students.push({id:crypto.randomUUID?crypto.randomUUID():Date.now().toString(),name,phone:$("#f_phone").value.trim(),parent:$("#f_parent").value.trim(),parentPhone:$("#f_parentPhone").value.trim(),group:$("#f_group").value.trim(),subject:$("#f_subject").value.trim(),dueDay:Number($("#f_dueDay").value)||20});
+ save();closeModal();render();toast("O‘quvchi saqlandi");
 }
-
-function isPaid(student) {
-  return Array.isArray(student.payments) &&
-    student.payments.some(p => p.month === monthKey());
+function openProfile(id){
+ const s=state.students.find(x=>x.id===id);if(!s)return;
+ const d=due(s), hist=state.payments.filter(p=>p.studentId===id).slice().reverse();
+ modal(`<button class="close" onclick="closeModal()">×</button>
+ <div class="profile-top"><div class="avatar">${initials(s.name)}</div><div><div class="profile-name">${esc(s.name)}</div><div class="sub">${esc(s.group||"Guruh yo‘q")}</div></div></div>
+ <div class="payment-box"><div class="label">Shu oy qarzdorligi</div><div class="num ${d?"red":"green"}" style="font-size:34px">${d?money(d):"To‘langan"}</div><div class="sub">Bugungi tarif: ${money(tariff())}</div></div>
+ ${s.phone?`<div class="detail"><b>O‘quvchi telefoni</b>${esc(s.phone)}</div>`:""}
+ ${s.parent?`<div class="detail"><b>Ota-ona</b>${esc(s.parent)}</div>`:""}
+ ${s.parentPhone?`<div class="detail"><b>Ota-ona telefoni</b>${esc(s.parentPhone)}</div>`:""}
+ ${s.subject?`<div class="detail"><b>Fan</b>${esc(s.subject)}</div>`:""}
+ <div class="actions"><button class="smallbtn" onclick="openPayment('${s.id}')">💳 To‘lov qabul qilish</button><button class="smallbtn" onclick="smsDraft('${s.id}')">✉️ SMS tayyorlash</button></div>
+ <h3>To‘lov tarixi</h3>${hist.length?hist.map(p=>`<div class="history-item"><span>${p.date}</span><b>${money(p.amount)}</b></div>`).join(""):`<div class="sub">To‘lovlar hali yo‘q.</div>`}`);
 }
-
-function initials(name) {
-  return escapeHtml(
-    String(name || "")
-      .trim()
-      .split(/\s+/)
-      .map(x => x[0] || "")
-      .slice(0, 2)
-      .join("")
-      .toUpperCase()
-  );
+function openPayment(id){
+ const s=state.students.find(x=>x.id===id);
+ modal(`<button class="close" onclick="openProfile('${id}')">×</button><h2>To‘lov qabul qilish</h2><div class="payment-box"><div class="label">Tavsiya etiladigan summa</div><div class="num blue" style="font-size:34px">${money(due(s)||tariff())}</div></div>
+ <div class="field"><input id="p_amount" value="${due(s)||tariff()}" inputmode="numeric"></div>
+ <div class="field"><input id="p_note" placeholder="Izoh (ixtiyoriy)"></div>
+ <div class="actions"><button class="cancel" onclick="openProfile('${id}')">Bekor</button><button class="save" onclick="addPayment('${id}')">To‘lovni saqlash</button></div>`);
 }
-
-function go(pageName) {
-  currentPage = pageName;
-  render();
+function addPayment(id){
+ const amount=Number($("#p_amount").value.replace(/\D/g,""));if(!amount){alert("Summani kiriting");return}
+ state.payments.push({id:Date.now().toString(),studentId:id,amount,date:new Date().toLocaleDateString("uz-UZ"),month:new Date().toISOString().slice(0,7),note:$("#p_note").value.trim()});
+ save();closeModal();render();toast("To‘lov saqlandi");
 }
-
-function statCard(label, value, cls) {
-  return `
-    <div class="card">
-      <div class="label">${label}</div>
-      <div class="value ${cls || ""}">${value}</div>
-    </div>`;
+function smsDraft(id){
+ const s=state.students.find(x=>x.id===id), d=due(s), text=`Assalomu alaykum. ${s.name}ning shu oy o‘quv to‘lovi ${money(d||tariff())}. To‘lovni amalga oshirishingizni so‘raymiz. Keleshek O‘quv Orayi.`;
+ if(navigator.share){navigator.share({text}).catch(()=>{})}else{navigator.clipboard?.writeText(text);toast("SMS matni nusxalandi")}
 }
-
-function studentRow(student) {
-  return `
-    <div class="row" onclick="openProfile('${student.id}')">
-      <div class="avatar">${initials(student.name)}</div>
-      <div class="grow">
-        <div class="name">${escapeHtml(student.name)}</div>
-        <div class="small">${escapeHtml(student.group || "Guruh kiritilmagan")}</div>
-      </div>
-      <span class="badge ${isPaid(student) ? "paid" : "debt"}">
-        ${isPaid(student) ? "To'langan" : money(currentPrice())}
-      </span>
-    </div>`;
-}
-
-function homePage() {
-  const paidCount = students.filter(isPaid).length;
-  const debtCount = students.length - paidCount;
-
-  const income = students.reduce((total, s) => {
-    if (!Array.isArray(s.payments)) return total;
-    return total + s.payments
-      .filter(p => p.month === monthKey())
-      .reduce((a, p) => a + Number(p.amount || 0), 0);
-  }, 0);
-
-  const debtors = students.filter(s => !isPaid(s)).slice(0, 10);
-
-  return `
-    <div class="grid">
-      ${statCard("O'quvchilar", students.length, "blue")}
-      ${statCard("To'laganlar", paidCount, "green")}
-      ${statCard("Qarzdorlar", debtCount, "red")}
-      ${statCard("Tushum", money(income), "blue")}
-    </div>
-
-    <div class="box">
-      <div class="label">Bugungi tarif</div>
-      <div class="value">${money(currentPrice())}</div>
-      <div class="small">
-        ${new Date().getDate() <= 20
-          ? "20-sanagacha to'lov"
-          : "21-sanadan boshlab to'lov"}
-      </div>
-    </div>
-
-    <div class="title">Tezkor amal</div>
-    <button class="btn" onclick="addStudent()">ï¼ O'quvchi qo'shish</button>
-
-    <div class="title">Qarzdorlar</div>
-    <div class="box">
-      ${debtors.length
-        ? debtors.map(studentRow).join("")
-        : `<div class="empty">Hozircha qarzdorlar yo'q ð</div>`}
-    </div>`;
-}
-
-function studentsPage() {
-  return `
-    <input
-      class="search"
-      id="studentSearch"
-      placeholder="O'quvchi yoki guruh qidirish..."
-      oninput="filterStudents(this.value)"
-    >
-    <button class="btn secondary" onclick="addStudent()">ï¼ Yangi o'quvchi</button>
-
-    <div class="box" id="studentList">
-      ${students.length
-        ? students.map(studentRow).join("")
-        : `<div class="empty">Hozircha o'quvchilar yo'q</div>`}
-    </div>`;
-}
-
-function filterStudents(q) {
-  const query = String(q || "").toLowerCase();
-  const list = students.filter(s =>
-    (String(s.name || "") + " " + String(s.group || ""))
-      .toLowerCase()
-      .includes(query)
-  );
-
-  const el = document.getElementById("studentList");
-  if (el) {
-    el.innerHTML = list.length
-      ? list.map(studentRow).join("")
-      : `<div class="empty">Topilmadi</div>`;
-  }
-}
-
-function paymentsPage() {
-  const paidStudents = students.filter(isPaid);
-
-  const income = paidStudents.reduce((total, s) => {
-    const ps = Array.isArray(s.payments) ? s.payments : [];
-    return total + ps
-      .filter(p => p.month === monthKey())
-      .reduce((a, p) => a + Number(p.amount || 0), 0);
-  }, 0);
-
-  return `
-    <div class="box">
-      <div class="label">${escapeHtml(monthTitle())} tushumi</div>
-      <div class="money">${money(income)}</div>
-      <div class="small">${paidStudents.length} ta o'quvchi</div>
-    </div>
-
-    <div class="title">To'lov qilganlar</div>
-    <div class="box">
-      ${paidStudents.length
-        ? paidStudents.map(studentRow).join("")
-        : `<div class="empty">Bu oyda to'lovlar yo'q</div>`}
-    </div>`;
-}
-
-function settingsPage() {
-  return `
-    <div class="title">To'lov qoidasi</div>
-    <div class="box">
-      <div class="row">
-        <div class="grow">1â20-sana</div>
-        <b>250 000 so'm</b>
-      </div>
-      <div class="row">
-        <div class="grow">21-sanadan</div>
-        <b>280 000 so'm</b>
-      </div>
-    </div>
-
-    <div class="title">Ma'lumotlar</div>
-    <button class="btn danger" onclick="clearAll()">
-      Barcha ma'lumotlarni o'chirish
-    </button>`;
-}
-
-function render() {
-  const app = document.getElementById("app");
-  if (!app) return;
-
-  if (currentPage === "home") app.innerHTML = homePage();
-  else if (currentPage === "students") app.innerHTML = studentsPage();
-  else if (currentPage === "payments") app.innerHTML = paymentsPage();
-  else app.innerHTML = settingsPage();
-
-  const monthEl = document.getElementById("month");
-  if (monthEl) monthEl.textContent = monthTitle();
-}
-
-function showModal(html) {
-  closeModal();
-
-  const modal = document.createElement("div");
-  modal.className = "modal";
-  modal.id = "modal";
-  modal.innerHTML = `<div class="sheet">${html}</div>`;
-  document.body.appendChild(modal);
-}
-
-function closeModal() {
-  const old = document.getElementById("modal");
-  if (old) old.remove();
-}
-
-function addStudent() {
-  showModal(`
-    <h2>Yangi o'quvchi</h2>
-
-    <input id="studentName" placeholder="Ism-familiya *">
-    <input id="studentPhone" placeholder="O'quvchi telefoni" type="tel">
-    <input id="parentName" placeholder="Ota-ona ismi">
-    <input id="parentPhone" placeholder="Ota-ona telefoni" type="tel">
-    <input id="studentGroup" placeholder="Guruh">
-
-    <div class="actions">
-      <button class="btn close" onclick="closeModal()">Bekor</button>
-      <button class="btn" onclick="createStudent()">Saqlash</button>
-    </div>
-  `);
-}
-
-function createStudent() {
-  const name = document.getElementById("studentName").value.trim();
-
-  if (!name) {
-    alert("Ism-familiyani kiriting.");
-    return;
-  }
-
-  const student = {
-    id: Date.now().toString(),
-    name: name,
-    phone: document.getElementById("studentPhone").value.trim(),
-    parent: document.getElementById("parentName").value.trim(),
-    parentPhone: document.getElementById("parentPhone").value.trim(),
-    group: document.getElementById("studentGroup").value.trim(),
-    payments: []
-  };
-
-  students.push(student);
-  save();
-  closeModal();
-  render();
-}
-
-function openProfile(id) {
-  const s = students.find(x => x.id === id);
-  if (!s) return;
-
-  const history = (Array.isArray(s.payments) ? s.payments : [])
-    .slice()
-    .reverse()
-    .map(p => `
-      <div class="row">
-        <div class="grow">
-          <b>${escapeHtml(p.month)}</b>
-          <div class="small">${escapeHtml(p.method || "")}</div>
-        </div>
-        <b>${money(p.amount)}</b>
-      </div>`)
-    .join("");
-
-  showModal(`
-    <h2>${escapeHtml(s.name)}</h2>
-
-    <div class="box">
-      ð ${escapeHtml(s.phone || "Kiritilmagan")}<br><br>
-      ð¨âð©âð¦ ${escapeHtml(s.parent || "Kiritilmagan")}<br><br>
-      ð ${escapeHtml(s.parentPhone || "Kiritilmagan")}<br><br>
-      ð¥ ${escapeHtml(s.group || "Kiritilmagan")}
-    </div>
-
-    <div class="box">
-      <div class="${isPaid(s) ? "green" : "red"}">
-        <b>${isPaid(s) ? "â To'langan" : "Qarzdor"}</b>
-      </div>
-
-      ${!isPaid(s)
-        ? `<div class="money">${money(currentPrice())}</div>
-           <button class="btn" onclick="takePayment('${s.id}')">
-             ð³ To'lov qabul qilish
-           </button>`
-        : ""}
-    </div>
-
-    <div class="title">To'lov tarixi</div>
-    <div class="box">
-      ${history || `<div class="empty">Tarix yo'q</div>`}
-    </div>
-
-    <button class="btn close" onclick="closeModal()">Yopish</button>
-  `);
-}
-
-function takePayment(id) {
-  const s = students.find(x => x.id === id);
-  if (!s) return;
-
-  showModal(`
-    <h2>To'lov qabul qilish</h2>
-
-    <div class="box">
-      <b>${escapeHtml(s.name)}</b>
-      <div class="money">${money(currentPrice())}</div>
-      <div class="small">${escapeHtml(monthTitle())}</div>
-    </div>
-
-    <select id="paymentMethod">
-      <option>Naqd</option>
-      <option>Click</option>
-      <option>Payme</option>
-      <option>Bank</option>
-      <option>Boshqa</option>
-    </select>
-
-    <div class="actions">
-      <button class="btn close" onclick="closeModal()">Bekor</button>
-      <button class="btn" onclick="confirmPayment('${s.id}')">
-        Tasdiqlash
-      </button>
-    </div>
-  `);
-}
-
-function confirmPayment(id) {
-  const s = students.find(x => x.id === id);
-  if (!s) return;
-
-  if (!Array.isArray(s.payments)) s.payments = [];
-
-  s.payments.push({
-    id: Date.now().toString(),
-    month: monthKey(),
-    amount: currentPrice(),
-    method: document.getElementById("paymentMethod").value,
-    date: new Date().toISOString()
-  });
-
-  save();
-  closeModal();
-  render();
-}
-
-function clearAll() {
-  if (!confirm("Barcha o'quvchi va to'lov ma'lumotlari o'chiriladi. Davom etilsinmi?")) {
-    return;
-  }
-
-  students = [];
-  save();
-  render();
-}
-
-document.addEventListener("DOMContentLoaded", render);
+function modal(html){const x=document.createElement("div");x.className="modal-back";x.id="modal";x.innerHTML=`<div class="sheet">${html}</div>`;document.body.appendChild(x)}
+function closeModal(){$("#modal")?.remove()}
+function toast(t){const x=document.createElement("div");x.className="toast";x.textContent=t;document.body.appendChild(x);setTimeout(()=>x.remove(),2800)}
+function esc(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+load();render();

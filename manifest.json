@@ -1,1 +1,9 @@
-{"name":"Keleshek Pay","short_name":"Keleshek Pay","start_url":"./","display":"standalone","background_color":"#f5f6f8","theme_color":"#0a84ff"}
+{
+  "name": "Keleshek Pay",
+  "short_name": "Keleshek Pay",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#1683ff",
+  "lang": "uz"
+}
