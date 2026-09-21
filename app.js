@@ -15,17 +15,29 @@ function currentTariff(){return new Date().getDate()<=20?250000:280000}
 function paidThisMonth(id,m=state.month){return state.payments.filter(p=>p.studentId===id&&p.month===m).reduce((a,p)=>a+p.amount,0)}
 function targetForStudent(id,m=state.month){
 
-  // Hozirgi oy bo‘lsa — bugungi sanaga qarab tarif
+  const [y,mo] = m.split("-").map(Number);
 
-  if(m===monthKey()){
+  const [cy,cmo] = monthKey().split("-").map(Number);
 
-    return new Date().getDate()<=20 ? 250000 : 280000;
+  // O'tgan oy
+
+  if (y < cy || (y === cy && mo < cmo)) {
+
+    return 280000;
 
   }
 
-  // O‘tgan oylar uchun tarif har doim 280 000
+  // Kelajak oy
 
-  return 280000;
+  if (y > cy || (y === cy && mo > cmo)) {
+
+    return 250000;
+
+  }
+
+  // Joriy oy
+
+  return new Date().getDate() <= 20 ? 250000 : 280000;
 
 }
 function due(s,m=state.month){return Math.max(0,targetForStudent(s.id,m)-paidThisMonth(s.id,m))}
