@@ -13,31 +13,136 @@ function monthKey(d=new Date()){return `${d.getFullYear()}-${String(d.getMonth()
 function monthLabel(k=state.month){const [y,m]=k.split("-").map(Number);return new Intl.DateTimeFormat("uz-UZ",{month:"long",year:"numeric"}).format(new Date(y,m-1,1))}
 function currentTariff(){return new Date().getDate()<=20?250000:280000}
 function paidThisMonth(id,m=state.month){return state.payments.filter(p=>p.studentId===id&&p.month===m).reduce((a,p)=>a+p.amount,0)}
+function paymentDate(p){
+
+  if(p.paidAt){
+
+    return new Date(p.paidAt);
+
+  }
+
+  // Eski to‘lovlarni saqlab qolish uchun
+
+  // eski date formatini ham o‘qishga harakat qiladi.
+
+  if(p.date){
+
+    const parts=String(p.date).split(/[./-]/).map(Number);
+
+    if(parts.length===3){
+
+      let [d,m,y]=parts;
+
+      if(y<100) y+=2000;
+
+      const dt=new Date(y,m-1,d);
+
+      if(!isNaN(dt.getTime())) return dt;
+
+    }
+
+  }
+
+  return null;
+
+}
+
+function paidBeforeOrOn20(id,m=state.month){
+
+  return state.payments
+
+    .filter(p=>p.studentId===id&&p.month===m)
+
+    .filter(p=>{
+
+      const d=paymentDate(p);
+
+      return d && d.getDate()<=20;
+
+    })
+
+    .reduce((a,p)=>a+p.amount,0);
+
+}
+
+function paidAfter20(id,m=state.month){
+
+  return state.payments
+
+    .filter(p=>p.studentId===id&&p.month===m)
+
+    .filter(p=>{
+
+      const d=paymentDate(p);
+
+      return d && d.getDate()>20;
+
+    })
+
+    .reduce((a,p)=>a+p.amount,0);
+
+}
 function targetForStudent(id,m=state.month){
 
-  const [y,mo] = m.split("-").map(Number);
+  const [y,mo]=m.split("-").map(Number);
 
-  const [cy,cmo] = monthKey().split("-").map(Number);
+  const [cy,cmo]=monthKey().split("-").map(Number);
 
-  // O'tgan oy
+  const total=paidThisMonth(id,m);
 
-  if (y < cy || (y === cy && mo < cmo)) {
+  const early=paidBeforeOrOn20(id,m);
+
+  const late=paidAfter20(id,m);
+
+  // O'TGAN OY
+
+  if(y<cy || (y===cy && mo<cmo)){
 
     return 280000;
 
   }
 
-  // Kelajak oy
+  // KELAJAK OY
 
-  if (y > cy || (y === cy && mo > cmo)) {
+  if(y>cy || (y===cy && mo>cmo)){
 
     return 250000;
 
   }
 
-  // Joriy oy
+  // JORIY OY
 
-  return new Date().getDate() <= 20 ? 250000 : 280000;
+  // 21-sanadan keyin qilingan har qanday to'lov
+
+  // tarifni 280 000 qiladi.
+
+  if(late>0){
+
+    return 280000;
+
+  }
+
+  // 20-sanagacha 250 000 to'langan bo'lsa,
+
+  // keyinchalik 30 000 qo'shilmaydi.
+
+  if(early>=250000){
+
+    return 250000;
+
+  }
+
+  // Joriy oy 21-sanadan o'tgan bo'lsa,
+
+  // to'liq to'lanmagan qarz 280 000 asosida.
+
+  if(new Date().getDate()>20){
+
+    return 280000;
+
+  }
+
+  return 250000;
 
 }
 function due(s,m=state.month){return Math.max(0,targetForStudent(s.id,m)-paidThisMonth(s.id,m))}
@@ -97,8 +202,59 @@ function addStudent(){const name=$("#f_name").value.trim();if(!name){alert("Ism-
 function updateStudent(id){const s=state.students.find(x=>x.id===id);if(!s)return;s.name=$("#f_name").value.trim();s.phone=$("#f_phone").value.trim();s.parent=$("#f_parent").value.trim();s.parentPhone=$("#f_parentPhone").value.trim();s.group=$("#f_group").value.trim();s.subject=$("#f_subject").value.trim();if(!s.name){alert("Ism-familiyani kiriting");return}save();closeModal();render();toast("Ma’lumotlar yangilandi")}
 function openProfile(id){const s=state.students.find(x=>x.id===id);if(!s)return;const d=due(s),hist=state.payments.filter(p=>p.studentId===id).slice().reverse();modal(`<button class="close" onclick="closeModal()">×</button><div class="profile-top"><div class="avatar">${initials(s.name)}</div><div><div class="profile-name">${esc(s.name)}</div><div class="sub">${esc(s.group||"Guruh yo‘q")}${s.subject?" · "+esc(s.subject):""}</div></div></div><div class="payment-box"><div class="label">${esc(monthLabel())} qarzdorligi</div><div class="num ${d?"red":"green"}" style="font-size:34px">${d?money(d):"To‘langan"}</div><div class="sub">Hisoblangan tarif: ${money(targetForStudent(s.id))}</div></div>${s.phone?`<div class="detail"><b>O‘quvchi telefoni</b>${esc(s.phone)}</div>`:""}${s.parent?`<div class="detail"><b>Ota-ona</b>${esc(s.parent)}</div>`:""}${s.parentPhone?`<div class="detail"><b>Ota-ona telefoni</b>${esc(s.parentPhone)}</div>`:""}<div class="actions"><button class="smallbtn" onclick="openPayment('${s.id}')">💳 To‘lov qabul qilish</button><button class="smallbtn" onclick="smsDraft('${s.id}')">✉️ SMS</button></div><div class="actions"><button class="smallbtn" onclick="openAdd('${s.id}')">✏️ Tahrirlash</button><button class="smallbtn danger" onclick="deleteStudent('${s.id}')">🗑 O‘chirish</button></div><h3>To‘lov tarixi</h3>${hist.length?hist.map(p=>`<div class="history-item"><span>${esc(p.date)}<small>${p.month===state.month?" · shu oy":""}</small></span><b>${money(p.amount)}</b></div>`).join(""):`<div class="sub">To‘lovlar hali yo‘q.</div>`}`)}
 function openPayment(id){const s=state.students.find(x=>x.id===id),suggest=Math.max(0,due(s));modal(`<button class="close" onclick="openProfile('${id}')">×</button><h2>To‘lov qabul qilish</h2><div class="payment-box"><div class="label">Qolgan summa</div><div class="num blue" style="font-size:34px">${money(suggest)}</div></div><div class="field"><input id="p_amount" value="${suggest||currentTariff()}" inputmode="numeric"></div><div class="field"><input id="p_note" placeholder="Izoh (ixtiyoriy)"></div><div class="actions"><button class="cancel" onclick="openProfile('${id}')">Bekor</button><button class="save" onclick="addPayment('${id}')">To‘lovni saqlash</button></div>`)}
-function addPayment(id){const amount=Number($("#p_amount").value.replace(/\D/g,""));if(!amount){alert("Summani kiriting");return}const now=new Date();state.payments.push({id:crypto.randomUUID?crypto.randomUUID():Date.now().toString(),studentId:id,amount,date:now.toLocaleDateString("uz-UZ"),month:monthKey(now),note:$("#p_note").value.trim()});save();closeModal();render();toast("To‘lov saqlandi")}
-function smsDraft(id){const s=state.students.find(x=>x.id===id),d=due(s),phone=s.parentPhone||s.phone,text=`Assalomu alaykum. ${s.name}ning ${monthLabel()} o‘quv to‘lovi bo‘yicha ${money(d)} qarzdorligi mavjud. To‘lovni amalga oshirishingizni so‘raymiz. Keleshek O‘quv Orayi.`;const sms=phone?`sms:${phone}?&body=${encodeURIComponent(text)}`:"";if(sms){location.href=sms}else{navigator.clipboard?.writeText(text);toast("Telefon raqami yo‘q — SMS matni nusxalandi")}}
+function addPayment(id){
+
+  const amount=Number(
+
+    $("#p_amount").value.replace(/\D/g,"")
+
+  );
+
+  if(!amount){
+
+    alert("Summani kiriting");
+
+    return;
+
+  }
+
+  const now=new Date();
+
+  state.payments.push({
+
+    id:crypto.randomUUID
+
+      ?crypto.randomUUID()
+
+      :Date.now().toString(),
+
+    studentId:id,
+
+    amount:amount,
+
+    // Ekranda ko'rsatish uchun
+
+    date:now.toLocaleDateString("uz-UZ"),
+
+    // Hisob-kitob uchun ANIQ sana
+
+    paidAt:now.toISOString(),
+
+    month:monthKey(now),
+
+    note:$("#p_note").value.trim()
+
+  });
+
+  save();
+
+  closeModal();
+
+  render();
+
+  toast("To‘lov saqlandi");
+
+}function smsDraft(id){const s=state.students.find(x=>x.id===id),d=due(s),phone=s.parentPhone||s.phone,text=`Assalomu alaykum. ${s.name}ning ${monthLabel()} o‘quv to‘lovi bo‘yicha ${money(d)} qarzdorligi mavjud. To‘lovni amalga oshirishingizni so‘raymiz. Keleshek O‘quv Orayi.`;const sms=phone?`sms:${phone}?&body=${encodeURIComponent(text)}`:"";if(sms){location.href=sms}else{navigator.clipboard?.writeText(text);toast("Telefon raqami yo‘q — SMS matni nusxalandi")}}
 function deleteStudent(id){const s=state.students.find(x=>x.id===id);if(!s)return;if(confirm(`${s.name}ni o‘chirishni tasdiqlaysizmi? To‘lovlar tarixi ham o‘chiriladi.`)){state.students=state.students.filter(x=>x.id!==id);state.payments=state.payments.filter(x=>x.studentId!==id);save();closeModal();render();toast("O‘quvchi o‘chirildi")}}
 function backup(){const data={version:5,exportedAt:new Date().toISOString(),students:state.students,payments:state.payments};const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`keleshek-pay-backup-${monthKey()}.json`;a.click();URL.revokeObjectURL(url);toast("Zaxira fayli tayyor")}
 function restoreFile(input){const f=input.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const x=JSON.parse(r.result);if(!Array.isArray(x.students)||!Array.isArray(x.payments))throw new Error();if(confirm("Mavjud ma’lumotlar o‘rniga zaxiradagi ma’lumotlar yuklansinmi?")){state.students=x.students;state.payments=x.payments;save();render();toast("Zaxira tiklandi")}}catch(e){alert("Zaxira fayli noto‘g‘ri yoki buzilgan")}};r.readAsText(f);input.value=""}
