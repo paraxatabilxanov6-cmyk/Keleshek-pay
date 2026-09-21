@@ -14,12 +14,29 @@ function monthLabel(k=state.month){const [y,m]=k.split("-").map(Number);return n
 function currentTariff(){return new Date().getDate()<=20?250000:280000}
 function paidThisMonth(id,m=state.month){return state.payments.filter(p=>p.studentId===id&&p.month===m).reduce((a,p)=>a+p.amount,0)}
 function targetForStudent(id,m=state.month){
+
  const ps=state.payments.filter(p=>p.studentId===id&&p.month===m);
- if(!ps.length) return (m===monthKey()&&new Date().getDate()>20)?280000:250000;
+
  const total=ps.reduce((a,p)=>a+p.amount,0);
+
+ // Agar 250 000 yoki undan ko‘p to‘langan bo‘lsa,
+
+ // o‘quvchi shu oy uchun to‘lagan hisoblanadi.
+
  if(total>=250000) return 250000;
- if(m===monthKey()&&new Date().getDate()>20) return 280000;
- return 250000;
+
+ // Hozirgi oy bo‘lsa — bugungi sanaga qarab tarif.
+
+ if(m===monthKey()){
+
+   return new Date().getDate()<=20 ? 250000 : 280000;
+
+ }
+
+ // O‘tib ketgan oyda to‘lanmagan qarz — 280 000.
+
+ return 280000;
+
 }
 function due(s,m=state.month){return Math.max(0,targetForStudent(s.id,m)-paidThisMonth(s.id,m))}
 function initials(n){return String(n||"").split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join("").toUpperCase()||"?"}
